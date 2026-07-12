@@ -4,6 +4,10 @@ Escriba el codigo que ejecute la accion solicitada.
 
 # pylint: disable=import-outside-toplevel
 
+import glob
+import os
+
+import pandas as pd
 
 def clean_campaign_data():
     """
@@ -39,7 +43,7 @@ def clean_campaign_data():
     - previous_outcome: cmabiar "success" por 1, y cualquier otro valor a 0
     - campaign_outcome: cambiar "yes" por 1 y cualquier otro valor a 0
     - last_contact_day: crear un valor con el formato "YYYY-MM-DD",
-        combinando los campos "day" y "month" con el año 2022.
+        combinando los campos "day" y "month" con el año 202 2.
 
     economics.csv:
     - client_id
@@ -49,32 +53,54 @@ def clean_campaign_data():
 
 
     """
-    import os
-    import glob
-    import pandas as pd # type:ignore
+    archivos = glob.glob("files/input/*.csv.zip")
+
+    dataframes = []
+    for archivo in archivos:
+        df = pd.read_csv(archivo, compression="zip", sep=",")
+
+        if df.columns[0].startswith(","):
+            df = df.rename(columns={df.columns[0]: "index"})
+            df = df.drop(columns=["index"])
+
+        dataframes.append(df)
+
+    dataframe = pd.concat(dataframes, ignore_index=True)
+
 
     os.makedirs("files/output", exist_ok=True)
 
-    archivos = sorted(glob.glob("files/input/*.csv.zip"))
+    client = dataframe[
+        [
+            "client_id",
+            "age",
+            "job",
+            "marital",
+            "education",
+            "credit_default",
+            "mortgage",
+        ]
+    ].copy()
 
-    datos = pd.concat(
-        [pd.read_csv(archivo, compression="zip") for archivo in archivos],
-        ignore_index=True,
-    )
-
-    if "Unnamed: 0" in datos.columns:
-        datos = datos.drop(columns=["Unnamed: 0"])
-
-    datos["job"] = (
-        datos["job"]
+    client["job"] = (
+        client["job"]
         .str.replace(".", "", regex=False)
         .str.replace("-", "_", regex=False)
     )
 
-    datos["education"] = (
-        datos["education"]
+    client["education"] = (
+        client["education"]
         .replace("unknown", pd.NA)
         .str.replace(".", "_", regex=False)
+    )
+
+    client["credit_default"] = (client["credit_default"] == "yes").astype(int)
+
+    client["mortgage"] = (client["mortgage"] == "yes").astype(int)
+
+    client.to_csv(
+        "files/output/client.csv",
+        index=False,
     )
 
     meses = {
@@ -92,31 +118,7 @@ def clean_campaign_data():
         "dec": "12",
     }
 
-    datos["last_contact_date"] = (
-        "2022-"
-        + datos["month"].map(meses)
-        + "-"
-        + datos["day"].astype(str).str.zfill(2)
-    )
-
-    client = datos[
-        [
-            "client_id",
-            "age",
-            "job",
-            "marital",
-            "education",
-            "credit_default",
-            "mortgage",
-        ]
-    ]
-
-    client.to_csv(
-        "files/output/client.csv",
-        index=False,
-    )
-
-    campaign = datos[
+    campaign = dataframe[
         [
             "client_id",
             "number_contacts",
@@ -124,22 +126,40 @@ def clean_campaign_data():
             "previous_campaign_contacts",
             "previous_outcome",
             "campaign_outcome",
-            "last_contact_date",
+            "day",
+            "month",
         ]
-    ]
+    ].copy()
+
+    campaign["previous_outcome"] = (
+        campaign["previous_outcome"] == "success"
+    ).astype(int)
+
+    campaign["campaign_outcome"] = (
+        campaign["campaign_outcome"] == "yes"
+    ).astype(int)
+
+    campaign["last_contact_date"] = (
+        "2022-"
+        + campaign["month"].map(meses)
+        + "-"
+        + campaign["day"].astype(int).astype(str).str.zfill(2)
+    )
+
+    campaign = campaign.drop(columns=["day", "month"])
 
     campaign.to_csv(
         "files/output/campaign.csv",
         index=False,
     )
 
-    economics = datos[
+    economics = dataframe[
         [
             "client_id",
             "cons_price_idx",
             "euribor_three_months",
         ]
-    ]
+    ].copy()
 
     economics.to_csv(
         "files/output/economics.csv",
