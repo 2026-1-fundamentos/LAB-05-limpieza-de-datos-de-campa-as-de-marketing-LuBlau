@@ -57,53 +57,26 @@ def clean_campaign_data():
 
     archivos = sorted(glob.glob("files/input/*.csv.zip"))
 
-    tablas = []
+    datos = pd.concat(
+        [pd.read_csv(archivo, compression="zip") for archivo in archivos],
+        ignore_index=True,
+    )
 
-    for archivo in archivos:
-        tablas.append(pd.read_csv(archivo, compression="zip"))
+    if "Unnamed: 0" in datos.columns:
+        datos = datos.drop(columns=["Unnamed: 0"])
 
-    datos = pd.concat(tablas, ignore_index=True)
-
-    datos.insert(0, "client_id", range(len(datos)))
-
-    #
-    # client.csv
-    #
-    client = pd.DataFrame()
-
-    client["client_id"] = datos["client_id"]
-    client["age"] = datos["age"]
-
-    client["job"] = (
+    datos["job"] = (
         datos["job"]
         .str.replace(".", "", regex=False)
         .str.replace("-", "_", regex=False)
     )
 
-    client["marital"] = datos["marital"]
-
-    client["education"] = (
+    datos["education"] = (
         datos["education"]
         .replace("unknown", pd.NA)
         .str.replace(".", "_", regex=False)
     )
 
-    client["credit_default"] = datos["default"].map(
-        lambda x: 1 if x == "yes" else 0
-    )
-
-    client["mortgage"] = datos["housing"].map(
-        lambda x: 1 if x == "yes" else 0
-    )
-
-    client.to_csv(
-        "files/output/client.csv",
-        index=False,
-    )
-
-    #
-    # campaign.csv
-    #
     meses = {
         "jan": "01",
         "feb": "02",
@@ -119,41 +92,54 @@ def clean_campaign_data():
         "dec": "12",
     }
 
-    campaign = pd.DataFrame()
-
-    campaign["client_id"] = datos["client_id"]
-    campaign["number_contacts"] = datos["campaign"]
-    campaign["contact_duration"] = datos["duration"]
-    campaign["previous_campaign_contacts"] = datos["previous"]
-
-    campaign["previous_outcome"] = datos["poutcome"].map(
-        lambda x: 1 if x == "success" else 0
-    )
-
-    campaign["campaign_outcome"] = datos["y"].map(
-        lambda x: 1 if x == "yes" else 0
-    )
-
-    campaign["last_contact_date"] = (
+    datos["last_contact_date"] = (
         "2022-"
         + datos["month"].map(meses)
         + "-"
         + datos["day"].astype(str).str.zfill(2)
     )
 
+    client = datos[
+        [
+            "client_id",
+            "age",
+            "job",
+            "marital",
+            "education",
+            "credit_default",
+            "mortgage",
+        ]
+    ]
+
+    client.to_csv(
+        "files/output/client.csv",
+        index=False,
+    )
+
+    campaign = datos[
+        [
+            "client_id",
+            "number_contacts",
+            "contact_duration",
+            "previous_campaign_contacts",
+            "previous_outcome",
+            "campaign_outcome",
+            "last_contact_date",
+        ]
+    ]
+
     campaign.to_csv(
         "files/output/campaign.csv",
         index=False,
     )
 
-    #
-    # economics.csv
-    #
-    economics = pd.DataFrame()
-
-    economics["client_id"] = datos["client_id"]
-    economics["cons_price_idx"] = datos["cons.price.idx"]
-    economics["euribor_three_months"] = datos["euribor3m"]
+    economics = datos[
+        [
+            "client_id",
+            "cons_price_idx",
+            "euribor_three_months",
+        ]
+    ]
 
     economics.to_csv(
         "files/output/economics.csv",
